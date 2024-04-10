@@ -27,7 +27,7 @@
 
 #ifndef DBG
 //the wifi-debugger is available by telnetting to your SmartEVSE device
-#define DBG 0  //comment or set to 0 for production release, 0 = no debug 1 = debug over telnet, 2 = debug over usb serial
+#define DBG 2  //comment or set to 0 for production release, 0 = no debug 1 = debug over telnet, 2 = debug over usb serial
 #endif
 
 #ifndef FAKE_RFID
@@ -51,9 +51,16 @@
 #endif
 
 #if FAKE_SUNNY_DAY
-#define INJECT_CURRENT_L1 10
-#define INJECT_CURRENT_L2 0
-#define INJECT_CURRENT_L3 0
+#define INJECT_CURRENT_L1_0 0
+#define INJECT_CURRENT_L2_0 0
+#define INJECT_CURRENT_L3_0 0
+#define INJECT_CURRENT_L1_1 13
+#define INJECT_CURRENT_L2_1 0
+#define INJECT_CURRENT_L3_1 0
+#define INJECT_CURRENT_L1_2 13
+#define INJECT_CURRENT_L2_2 13
+#define INJECT_CURRENT_L3_2 13
+#define SUN_STATUS_SWITCH_TIME 180                                          // sun status switch time in seconds
 #endif
 
 #ifndef MQTT
@@ -114,11 +121,11 @@ extern RemoteDebug Debug;
 #define _LOG_D( ... ) log_d ( __VA_ARGS__ )
 #define _LOG_V( ... ) log_v ( __VA_ARGS__ )
 #define _LOG_A( ... ) log_n ( __VA_ARGS__ )
-#define _LOG_W_NO_FUNC( ... ) log_w ( __VA_ARGS__ )
-#define _LOG_I_NO_FUNC( ... ) log_i ( __VA_ARGS__ )
-#define _LOG_D_NO_FUNC( ... ) log_d ( __VA_ARGS__ )
-#define _LOG_V_NO_FUNC( ... ) log_v ( __VA_ARGS__ )
-#define _LOG_A_NO_FUNC( ... ) log_n ( __VA_ARGS__ )
+#define _LOG_W_NO_FUNC( ... ) Serial.printf ( __VA_ARGS__ )
+#define _LOG_I_NO_FUNC( ... ) Serial.printf ( __VA_ARGS__ )
+#define _LOG_D_NO_FUNC( ... ) Serial.printf ( __VA_ARGS__ )
+#define _LOG_V_NO_FUNC( ... ) Serial.printf ( __VA_ARGS__ )
+#define _LOG_A_NO_FUNC( ... ) Serial.printf ( __VA_ARGS__ )
 #endif
 
 // Pin definitions left side ESP32
@@ -225,7 +232,8 @@ extern RemoteDebug Debug;
 #define ACK_TIMEOUT 1000                                                        // 1000ms timeout
 #define NR_EVSES 8
 #define BROADCAST_ADR 0x09
-#define COMM_TIMEOUT 11
+#define COMM_TIMEOUT 11                                                         // Timeout for MainsMeter
+#define COMM_EVTIMEOUT 8*NR_EVSES                                               // Timeout for EV Energy Meters
 
 #define STATE_A 0                                                               // A Vehicle not connected
 #define STATE_B 1                                                               // B Vehicle connected / not ready to accept energy
@@ -257,7 +265,7 @@ extern RemoteDebug Debug;
 #define LESS_6A 1
 #define CT_NOCOMM 2
 #define TEMP_HIGH 4
-#define UNUSED 8                                                                // Unused
+#define EV_NOCOMM 8
 #define RCM_TRIPPED 16                                                          // RCM tripped. >6mA DC residual current detected.
 #define NO_SUN 32
 #define Test_IO 64
@@ -368,11 +376,10 @@ extern RemoteDebug Debug;
 #define MENU_WIFI 34                                                            // 0x0219: WiFi mode
 #define MENU_C2 35
 #define MENU_MAX_TEMP 36
-#define MENU_MODEM 37
-#define MENU_SUMMAINS 38
-#define MENU_OFF 39                                                             // so access bit is reset and charging stops when pressing < button 2 seconds
-#define MENU_ON 40                                                              // so access bit is set and charging starts when pressing > button 2 seconds
-#define MENU_EXIT 41
+#define MENU_SUMMAINS 37
+#define MENU_OFF 38                                                             // so access bit is reset and charging stops when pressing < button 2 seconds
+#define MENU_ON 39                                                              // so access bit is set and charging starts when pressing > button 2 seconds
+#define MENU_EXIT 40
 
 #define MENU_STATE 50
 
@@ -465,6 +472,7 @@ extern int32_t EnergyCapacity;
 extern int32_t PowerMeasured;
 extern uint8_t RFIDstatus;
 extern bool LocalTimeSet;
+extern uint32_t serialnr;
 
 extern uint8_t MenuItems[MENU_EXIT];
 
@@ -472,12 +480,14 @@ enum EnableC2_t { NOT_PRESENT, ALWAYS_OFF, SOLAR_OFF, ALWAYS_ON, AUTO };
 enum Modem_t { NOTPRESENT, EXPERIMENT };
 const static char StrEnableC2[][12] = { "Not present", "Always Off", "Solar Off", "Always On", "Auto" };
 const static char StrModem[][12] = { "Not present", "Experiment" };
+extern uint8_t Nr_Of_Phases_Charging;
 enum Single_Phase_t { FALSE, GOING_TO_SWITCH, AFTER_SWITCH };
 extern Single_Phase_t Switching_To_Single_Phase;
-extern uint8_t Nr_Of_Phases_Charging;
+uint8_t Force_Single_Phase_Charging(void);
+
 
 const struct {
-    char LCD[9];
+    char LCD[10];
     char Desc[52];
     uint16_t Min;
     uint16_t Max;
@@ -492,7 +502,7 @@ const struct {
     {"LOCK",    "Cable locking actuator type",                        0, 2, LOCK},
     {"MIN",     "MIN Charge Current the EV will accept (per phase)",  6, 16, MIN_CURRENT},
     {"MAX",     "MAX Charge Current for this EVSE (per phase)",       6, 80, MAX_CURRENT},
-    {"MULTI",   "Multiple connected SmartEVSEs (2-8)",                0, NR_EVSES, LOADBL},
+    {"PWR SHARE", "Share Power between multiple SmartEVSEs (2-8)",    0, NR_EVSES, LOADBL},
     {"SWITCH",  "Switch function control on pin SW",                  0, 4, SWITCH},
     {"RCMON",   "Residual Current Monitor on pin RCM",                0, 1, RC_MON},
     {"RFID",    "RFID reader, learn/remove cards",                    0, 5, RFID_READER},
@@ -509,10 +519,10 @@ const struct {
     {"START",   "Surplus energy start Current (sum of phases)",       0, 48, START_CURRENT},
     {"STOP",    "Stop solar charging at 6A after this time",          0, 60, STOP_TIME},
     {"IMPORT",  "Allow grid power when solar charging (sum of phase)",0, 48, IMPORT_CURRENT},
-    {"MAINSMET","Type of mains electric meter",                       0, EM_CUSTOM, MAINS_METER},
-    {"MAINSADR","Address of mains electric meter",                    MIN_METER_ADDRESS, MAX_METER_ADDRESS, MAINS_METER_ADDRESS},
+    {"MAINS MET","Type of mains electric meter",                       0, EM_CUSTOM, MAINS_METER},
+    {"MAINS ADR","Address of mains electric meter",                    MIN_METER_ADDRESS, MAX_METER_ADDRESS, MAINS_METER_ADDRESS},
     {"BYTE ORD","Byte order of custom electric meter",                0, 3, EMCUSTOM_ENDIANESS},
-    {"DATATYPE","Data type of custom electric meter",                 0, MB_DATATYPE_MAX - 1, EMCUSTOM_DATATYPE},
+    {"DATA TYPE","Data type of custom electric meter",                 0, MB_DATATYPE_MAX - 1, EMCUSTOM_DATATYPE},
     {"FUNCTION","Modbus Function of custom electric meter",           3, 4, EMCUSTOM_FUNCTION},
     {"VOL REGI","Register for Voltage (V) of custom electric meter",  0, 65530, EMCUSTOM_UREGISTER},
     {"VOL DIVI","Divisor for Voltage (V) of custom electric meter",   0, 7, EMCUSTOM_UDIVISOR},
@@ -524,10 +534,9 @@ const struct {
     {"ENE DIVI","Divisor for Energy (kWh) of custom electric meter",  0, 7, EMCUSTOM_EDIVISOR},
     {"READ MAX","Max register read at once of custom electric meter", 3, 255, 3},
     {"WIFI",    "Connect to WiFi access point",                       0, 2, WIFI_MODE},
-    {"CONTACT2","Contactor2 (C2) behaviour",                          0, sizeof(StrEnableC2) / sizeof(StrEnableC2[0])-1, ENABLE_C2},
+    {"CONTACT 2","Contactor2 (C2) behaviour",                          0, sizeof(StrEnableC2) / sizeof(StrEnableC2[0])-1, ENABLE_C2},
     {"MAX TEMP","Maximum temperature for the EVSE module",            40, 75, MAX_TEMPERATURE},
-    {"MODEM",   "Is an ISO15118 modem installed (experimental)",      0, 1, NOTPRESENT},
-    {"SUMMAINS","Capacity Rate limit on sum of MAINS Current (A)",    10, 600, MAX_SUMMAINS},
+    {"SUM MAINS","Capacity Rate limit on sum of MAINS Current (A)",    10, 600, MAX_SUMMAINS},
     {"", "Hold 2 sec to stop charging", 0, 0, 0},
     {"", "Hold 2 sec to start charging", 0, 0, 0},
 

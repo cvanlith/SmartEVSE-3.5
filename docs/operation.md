@@ -1,5 +1,6 @@
 # Improved starting/stopping through the LCD screen
 * When pressing o button longer then 2 seconds you will enter the Menu screen
+* When pressing < button shorter then 2 seconds, you will toggle between Smart/Solar mode
 * When pressing < button longer then 2 seconds the access will be denied, i.e. the mode will be set to "Off" and charging will stop
 * When pressing > button longer then 2 seconds the access will be granted, i.e. the previously set mode will be activated and charging will start
 
@@ -7,7 +8,7 @@
 After configuration of your Wifi parameters, your SmartEVSE will present itself on your LAN via a webserver. This webserver can be accessed through:
 * http://ip-address/
 * http://smartevse-xxxx.local/ where xxxx is the serial number of your SmartEVSE. It can be found on a sticker on the bottom of your SmartEVSE. It might be necessary that mDNS is configured on your LAN.
-* http://smartevse-yyyy.lan/ where yyyy is a derivative of the MAC addresss, that was shown to you when you configured your Wifi parameters.
+* http://smartevse-xxxx.lan/ where xxxx is the serial number of your SmartEVSE. It can be found on a sticker on the bottom of your SmartEVSE. It might be necessary that mDNS is configured on your LAN.
 * OTA update of your firmware:
     - surf to http://your-smartevse/update
     - select the firmware.bin from this archive, OR if you want the debug version (via telnet over your wifi),
@@ -18,7 +19,7 @@ After configuration of your Wifi parameters, your SmartEVSE will present itself 
     - after OK, wait 10-30 seconds and your new firmware including the webserver should be online!
 * Added wifi-debugging: if you flashed the debug version, telnet http://your-smartevse/ will bring you to a debugger that shows you whats going on!
 
-# Mode switching when MULTI SmartEVSE is configured
+# Mode switching when PWR SHARE is activated
 * If you switch mode on the Master, the Slaves will follow that mode switch
 * If you switch mode on one Slave, and your Master does not have a Smart/Solar toggle switch configured, the Master and all the other slaves will follow
 * If you have a Smart/Solar toggle switch you have to guard yourself that Master and Slaves are all in the same mode. We recommend replacing that toggle switch by a pushbutton switch.
