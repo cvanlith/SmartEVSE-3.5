@@ -466,7 +466,7 @@ void GLCD(void) {
     }
 
     if (ErrorFlags) {                                                           // We switch backlight on, as we exit after displaying the error
-        // BacklightTimer = BACKLIGHT;                                             // Backlight timer is set to 60 seconds
+        BacklightTimer = BACKLIGHT;                                             // Backlight timer is set to 120 seconds
 
         if (ErrorFlags & (CT_NOCOMM | EV_NOCOMM)) {                             // No serial communication for 10 seconds
             
@@ -639,7 +639,7 @@ void GLCD(void) {
         if (abs(Isum) >3 ) GLCD_write_buf(0x0A, 0);                             // Show energy flow 'blob' between Grid and House
                                                                                 // If current flow is < 0.3A don't show the blob
 
-        if (EVMeter && !SolarStopTimer) {                                       // If we have a EV kWh meter configured, Show total charged energy in kWh on LCD.
+        if (EVMeter) {                                                          // If we have a EV kWh meter configured, Show total charged energy in kWh on LCD.
             sprintfl(Str, "%2u.%1ukWh", EnergyCharged, 3, 1);                   // Will reset to 0.0kWh when charging cable reconnected, and state change from STATE B->C
             GLCD_write_buf_str(89, 1, Str,GLCD_ALIGN_LEFT);                     // print to buffer
         }
@@ -703,9 +703,19 @@ void GLCD(void) {
         } else if (State == STATE_MODEM_REQUEST || State == STATE_MODEM_WAIT || State == STATE_MODEM_DONE) {                                          // Modem states
             GLCD_print_buf2(5, (const char *) "MODEM");
         } else if (State != STATE_C) {
-                sprintf(Str, "READY %u", ChargeDelay);
-                if (!ChargeDelay) Str[5] = '\0';
-                 GLCD_print_buf2(5, Str);
+                switch (Switching_To_Single_Phase) {
+                    case FALSE:
+                        sprintf(Str, "READY %u", ChargeDelay);
+                        if (!ChargeDelay) Str[5] = '\0';
+                        break;
+                    case GOING_TO_SWITCH:
+                        sprintf(Str, "3F -> 1F %u", ChargeDelay);
+                        if (!ChargeDelay) Str[7] = '\0';
+                        break;
+                    case AFTER_SWITCH:                                          // never getting here, just preventing compiler warning
+                        break;
+                }
+                GLCD_print_buf2(5, Str);
         } else if (State == STATE_C) {
             switch (LCDText) {
                 default:
@@ -713,15 +723,19 @@ void GLCD(void) {
                     if (Mode != MODE_NORMAL) {
                         if (Mode == MODE_SOLAR) sprintf(Str, "SOLAR");
                             else sprintf(Str, "SMART");
+                        if (Nr_Of_Phases_Charging != 0) {
+                            sprintf(Str+5," %uF", Nr_Of_Phases_Charging);
+                        }
                         GLCD_print_buf2(5, Str);
                         break;
                     } else LCDText++;
                     // fall through
                 case 1:
-                    if (EstimateNrOfPhasesCharging() == 1) sprintf(Str,"1F CHARGING");
+                    GLCD_print_buf2(5, (const char *) "CHARGING");
+                     if (Nr_Of_Phases_Charging == 1) sprintf(Str,"1F CHARGING");
                         else sprintf(Str, "CHARGING");
                     GLCD_print_buf2(5, Str);
-                    break;
+                   break;
                 case 2:
                     if (EVMeter) {
                         sprintfl(Str, "%u.%01u kW", PowerMeasured, 3, 1);
@@ -936,8 +950,8 @@ uint8_t getMenuItems (void) {
         }
     }
     MenuItems[m++] = MENU_MAX;                                                  // Max Charge current (A)
-    if (LoadBl == 1 || (LoadBl == 0 && Mode != MODE_NORMAL)) {                  // ? Load balancing Master?
-                                                                                // Also, when not in Normal Mode, MaxCircuit will limit
+    if (LoadBl == 1 || (LoadBl == 0 && Mode != MODE_NORMAL && EVMeter)) {       // ? Load balancing Master?
+                                                                                // Also, when not in Normal Mode and that EV meter is present, MaxCircuit will limit
                                                                                 // the total current (subpanel configuration)
         MenuItems[m++] = MENU_CIRCUIT;                                          // - Max current of the EVSE circuit (A)
     }
