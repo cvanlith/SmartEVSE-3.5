@@ -37,7 +37,7 @@ PWR SHARE  ; formerly known as LOADBALANCING.
   <Master>	Set the first SmartEVSE to Master. Make sure there is only one Master.
   <Node1-7>	And the other SmartEVSE's to Node 1-7.
 
-MAINSMET Set type of MAINS meter
+MAINSMET Set type of MAINS meter (only appears in Smart or Solar mode):
   <Disabled>    No MAINS meter connected; only Normal mode possible
   <Sensorbox>   the Sensorbox will send measurement data to the SmartEVSE
   <API>         The MAINS meter data will be fed through the REST API or the MQTT API.
@@ -74,7 +74,7 @@ MAX	Set MAX charge current for the EV: 10-80A (per phase)
         that your fixed cable can carry.
 
 CIRCUIT	(only appears when PWR SHARE set to <Master>, or when PWR SHARE set to <Disabled>
-        and Mode is Smart or Solar):
+        and Mode is Smart or Solar and EV METER not set to <Disabled>):
         Set the max current the EVSE circuit can handle (load balancing): 10-200A
         (see also subpanel wiring)
 

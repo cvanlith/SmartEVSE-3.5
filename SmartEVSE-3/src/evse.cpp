@@ -94,7 +94,6 @@ static esp_adc_cal_characteristics_t * adc_chars_PP;
 static esp_adc_cal_characteristics_t * adc_chars_Temperature;
 
 struct ModBus MB;          // Used by SmartEVSE fuctions
-bool RequestOutstanding[248][0x11];
 
 const char StrStateName[15][13] = {"A", "B", "C", "D", "COMM_B", "COMM_B_OK", "COMM_C", "COMM_C_OK", "Activate", "B1", "C1", "MODEM1", "MODEM2", "MODEM_OK", "MODEM_DENIED"};
 const char StrStateNameWeb[15][17] = {"Ready to Charge", "Connected to EV", "Charging", "D", "Request State B", "State B OK", "Request State C", "State C OK", "Activate", "Charging Stopped", "Stop Charging", "Modem Setup", "Modem Request", "Modem Done", "Modem Denied"};
@@ -617,11 +616,6 @@ void setMode(uint8_t NewMode) {
     if (!MainsMeter && NewMode != MODE_NORMAL)
         return;
 
-    // Clear guard of all outstanding requests
-    for (int i=0 ; i<248; i++)
-        for (int j=0; j<0x11; j++)
-            RequestOutstanding[i][j]=false;
-
     // Take care of extra conditionals/checks for custom features
     setAccess(!DelayedStartTime.epoch2); //if DelayedStartTime not zero then we are Delayed Charging
     if (NewMode == MODE_SOLAR) {
@@ -783,6 +777,7 @@ void setState(uint8_t NewState) {
                     Switching_To_Single_Phase = AFTER_SWITCH;                   // we finished the switching process,
                                                                                 // BUT we don't know which is the single phase
             }
+
             CONTACTOR1_ON;
             if (!Force_Single_Phase_Charging() && Switching_To_Single_Phase != AFTER_SWITCH) {                               // in AUTO mode we start with 3phases
                 CONTACTOR2_ON;                                                  // Contactor2 ON
@@ -1076,39 +1071,29 @@ void CalcBalancedCurrent(char mod) {
             _LOG_V("Checkpoint 3 Isetbalanced=%.1f A, IsumImport=%.1f, Isum=%.1f, ImportCurrent=%i.\n", (float)IsetBalanced/10, (float)IsumImport/10, (float)Isum/10, ImportCurrent);
 
             // If IsetBalanced is below MinCurrent or negative, make sure it's set to MinCurrent.
-            if ((IsetBalanced < (ActiveEVSE * MinCurrent * 10)) || (IsetBalanced < 0))
-            {
+            if ( (IsetBalanced < (ActiveEVSE * MinCurrent * 10)) || (IsetBalanced < 0) ) {
                 IsetBalanced = ActiveEVSE * MinCurrent * 10;
                 // ----------- Check to see if we have to continue charging on solar power alone ----------
-                if (ActiveEVSE && StopTime && (IsumImport > 10))
-                {
-                    // TODO maybe enable solar switching for loadbl = 1
+                if (ActiveEVSE && StopTime && (IsumImport > 10)) {
+                    //TODO maybe enable solar switching for loadbl = 1
                     if (EnableC2 == AUTO && LoadBl == 0)
                         Set_Nr_of_Phases_Charging();
-                    if (Nr_Of_Phases_Charging > 1 && EnableC2 == AUTO && LoadBl == 0)
-                    {                                           // when loadbalancing is enabled we don't do forced single phase charging
-                        _LOG_A("Switching to single phase.\n"); // because we wouldnt know which currents to make available to the nodes...
-                                                                // since we don't know how many phases the nodes are using...
-                        // switching contactor2 off works ok for Skoda Enyaq but Hyundai Ioniq 5 goes into error, so we have to switch more elegantly
-                        if (State == STATE_C)
-                            setState(STATE_C1); // tell EV to stop charging
+                    if (Nr_Of_Phases_Charging > 1 && EnableC2 == AUTO && LoadBl == 0) { // when loadbalancing is enabled we don't do forced single phase charging
+                        _LOG_A("Switching to single phase.\n");                 // because we wouldnt know which currents to make available to the nodes...
+                                                                                // since we don't know how many phases the nodes are using...
+                        //switching contactor2 off works ok for Skoda Enyaq but Hyundai Ioniq 5 goes into error, so we have to switch more elegantly
+                        if (State == STATE_C) setState(STATE_C1);               // tell EV to stop charging
                         Switching_To_Single_Phase = GOING_TO_SWITCH;
                     }
-                    else
-                    {
-                        if (SolarStopTimer == 0)
-                            setSolarStopTimer(StopTime * 60); // Convert minutes into seconds
+                    else {
+                        if (SolarStopTimer == 0) setSolarStopTimer(StopTime * 60); // Convert minutes into seconds
                     }
-                }
-                else
-                {
-                    _LOG_D("Checkpoint a: Resetting SolarStopTimer, IsetBalanced=%.1fA, ActiveEVSE=%i.\n", (float)IsetBalanced / 10, ActiveEVSE);
+                } else {
+                    _LOG_D("Checkpoint a: Resetting SolarStopTimer, IsetBalanced=%.1fA, ActiveEVSE=%i.\n", (float)IsetBalanced/10, ActiveEVSE);
                     setSolarStopTimer(0);
                 }
                 Solar3PhaseStartTimer = 0;
-            }
-            else 
-            { // enough energy available
+            } else { //enough energy available
                 if (IsumImport < (ActiveEVSE * MinCurrent * -20))               // we had enough solar energy available for 2 extra phases
                 {
                     if (Nr_Of_Phases_Charging == 1 && Solar3PhaseStartTimer == 0) Solar3PhaseStartTimer = 60;
@@ -1119,10 +1104,10 @@ void CalcBalancedCurrent(char mod) {
                     if (Solar3PhaseStartTimer > 80) Solar3PhaseStartTimer = 0;  // stop 3f timer when no excess power for too long
                 }
 
-                _LOG_D("Checkpoint b: Resetting SolarStopTimer, IsetBalanced=%.1fA, ActiveEVSE=%i.\n", (float)IsetBalanced / 10, ActiveEVSE);
+                _LOG_D("Checkpoint b: Resetting SolarStopTimer, IsetBalanced=%.1fA, ActiveEVSE=%i.\n", (float)IsetBalanced/10, ActiveEVSE);
                 setSolarStopTimer(0);
-           }
-        }      // end MODE_SOLAR
+            }
+        } //end MODE_SOLAR
         else { // MODE_SMART
         // New EVSE charging, and only if we have active EVSE's
             if (mod && ActiveEVSE) {                                            // Set max combined charge current to MaxMains - Baseload
@@ -2146,7 +2131,7 @@ void EVSEStates(void * parameter) {
                     if (Switching_To_Single_Phase == FALSE) {
                         Switching_To_Single_Phase = GOING_TO_SWITCH;            // try 1 phase first
                     } else {
-                        ErrorFlags |= NO_SUN;                                   // Not enough solar power
+                    	ErrorFlags |= NO_SUN;                                   // Not enough solar power
                     }
                 } else ErrorFlags |= LESS_6A;                                   // Not enough power available
             }
@@ -2194,7 +2179,7 @@ void EVSEStates(void * parameter) {
                             if (Switching_To_Single_Phase == FALSE) {
                                 Switching_To_Single_Phase = GOING_TO_SWITCH;    // try 1 phase first
                             } else {
-                                ErrorFlags |= NO_SUN;                           // Not enough solar power
+                            	ErrorFlags |= NO_SUN;                           // Not enough solar power
                             }
                         } else ErrorFlags |= LESS_6A;                           // Not enough power available
                     }
@@ -2958,12 +2943,12 @@ void Timer1S(void * parameter) {
             SolarStopTimer--;
             if (SolarStopTimer == 0) {
                 if (Switching_To_Single_Phase == AFTER_SWITCH) {
-                    if (State == STATE_C) setState(STATE_C1);               // tell EV to stop charging
-                    ErrorFlags |= NO_SUN;                                   // Set error: NO_SUN
+                	if (State == STATE_C) setState(STATE_C1);               // tell EV to stop charging
+                	ErrorFlags |= NO_SUN;                                   // Set error: NO_SUN
                 } else {
                     Switching_To_Single_Phase = GOING_TO_SWITCH;            // try 1 phase           
-                }
-            }
+            	}
+        	}
         }
 
         // when charging with 1 phase and abundant sun is available a timer is started
@@ -3166,6 +3151,8 @@ signed int receivePowerMeasurement(uint8_t *buf, uint8_t Meter) {
             );
             return receiveMeasurement(buf, 0, EMConfig[Meter].Endianness, EMConfig[Meter].DataType, scalingFactor);
         }
+        case EM_EASTRON3P_INV:
+            return -receiveMeasurement(buf, 0, EMConfig[Meter].Endianness, EMConfig[Meter].DataType, EMConfig[Meter].PDivisor);
         default:
             return receiveMeasurement(buf, 0, EMConfig[Meter].Endianness, EMConfig[Meter].DataType, EMConfig[Meter].PDivisor);
     }
@@ -3284,7 +3271,6 @@ ModbusMessage MBNodeRequest(ModbusMessage request) {
 
     ModbusDecode( (uint8_t*)request.data(), request.size());
     ItemID = mapModbusRegister2ItemID();
-    RequestOutstanding[MB.Address][MB.Function] = false;
 
     switch (MB.Function) {
         case 0x03: // (Read holding register)
@@ -3359,8 +3345,6 @@ ModbusMessage MBbroadcast(ModbusMessage request) {
     int16_t combined;
 
     ModbusDecode( (uint8_t*)request.data(), request.size());
-    RequestOutstanding[MB.Address][MB.Function] = false;
-
     ItemID = mapModbusRegister2ItemID();
 
     if (MB.Type == MODBUS_REQUEST) {
@@ -3375,7 +3359,7 @@ ModbusMessage MBbroadcast(ModbusMessage request) {
                 }
 
                 if (OK && ItemID < STATUS_STATE) write_settings();
-                _LOG_D("Broadcast received FC06 Item:%u val:%u\n",ItemID, MB.Value);
+                _LOG_V("Broadcast received FC06 Item:%u val:%u\n",ItemID, MB.Value);
                 break;
             case 0x10: // (Write multiple register))
                 // 0x0020: Balance currents
@@ -3408,7 +3392,7 @@ ModbusMessage MBbroadcast(ModbusMessage request) {
                     }
 
                     if (OK && ItemID < STATUS_STATE) write_settings();
-                    _LOG_D("Other Broadcast received\n");
+                    _LOG_V("Other Broadcast received\n");
                 }    
                 break;
             default:
@@ -3425,7 +3409,6 @@ ModbusMessage MBbroadcast(ModbusMessage request) {
 void MBhandleData(ModbusMessage msg, uint32_t token) 
 {
     uint8_t Address = msg.getServerID();    // returns Server ID or 0 if MM_data is shorter than 3
-    RequestOutstanding[Address][msg.getFunctionCode()] = false;
     if (Address == MainsMeterAddress) {
         //_LOG_A("MainsMeter data\n");
         MBMainsMeterResponse(msg);
@@ -3488,7 +3471,6 @@ void MBhandleError(Error error, uint32_t token)
   address = token >> 24;
   function = (token >> 16);
   reg = token & 0xFFFF;
-  RequestOutstanding[address][function] = false;
 
   if (LoadBl == 1 && address>=2 && address <=8 && function == 4 && reg == 0) {  //master sends out messages to nodes 2-8, if no EVSE is connected with that address
                                                                                 //a timeout will be generated. This is legit!
@@ -3535,9 +3517,6 @@ void ConfigureModbusMode(uint8_t newmode) {
             if (newmode != 255) MBserver.end();
             _LOG_A("ConfigureModbusMode2 task free ram: %u\n", uxTaskGetStackHighWaterMark( NULL ));
 
-            for (int i=0 ; i<248; i++)
-                for (int j=0; j<0x11; j++)
-                    RequestOutstanding[i][j]=false;
             MBclient.setTimeout(85);                        // Set modbus timeout to 85ms. 15ms lower then modbusRequestloop time of 100ms.
             MBclient.onDataHandler(&MBhandleData);
             MBclient.onErrorHandler(&MBhandleError);
@@ -4578,7 +4557,9 @@ void WiFiSetup(void) {
     WiFi.onEvent(onWifiEvent);
 
     // Init and get the time
-    sntp_servermode_dhcp(1);                                                    //try to get the ntp server from dhcp
+    // First option to get time from local ntp server blocks the second fallback option since 2021:
+    // See https://github.com/espressif/arduino-esp32/issues/4964
+    //sntp_servermode_dhcp(1);                                                    //try to get the ntp server from dhcp
     sntp_setservername(1, "europe.pool.ntp.org");                               //fallback server
     sntp_set_time_sync_notification_cb(timeSyncCallback);
     sntp_init();

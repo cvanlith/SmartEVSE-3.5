@@ -177,7 +177,9 @@ extern RemoteDebug Debug;
 #define MAX_MAINS 25                                                            // max Current the Mains connection can supply
 #define MAX_SUMMAINS 600                                                        // only used for capacity rate limiting, max current over the sum of all phases
 #define MAX_CURRENT 13                                                          // max charging Current for the EV
+#ifndef MIN_CURRENT
 #define MIN_CURRENT 6                                                           // minimum Current the EV will accept
+#endif
 #define MODE 0                                                                  // Normal EVSE mode
 #define LOCK 0                                                                  // No Cable lock
 #define MAX_CIRCUIT 16                                                          // Max current of the EVSE circuit breaker
@@ -284,11 +286,11 @@ extern RemoteDebug Debug;
 #define PILOT_CONNECTED digitalWrite(PIN_CPOFF, LOW);
 #define PILOT_DISCONNECTED digitalWrite(PIN_CPOFF, HIGH);
 
-#define CONTACTOR1_ON digitalWrite(PIN_SSR, HIGH);
-#define CONTACTOR1_OFF digitalWrite(PIN_SSR, LOW);
+#define CONTACTOR1_ON _LOG_A("Switching Contactor1 ON.\n"); digitalWrite(PIN_SSR, HIGH);
+#define CONTACTOR1_OFF _LOG_A("Switching Contactor1 OFF.\n"); digitalWrite(PIN_SSR, LOW);
 
-#define CONTACTOR2_ON digitalWrite(PIN_SSR2, HIGH);
-#define CONTACTOR2_OFF digitalWrite(PIN_SSR2, LOW);
+#define CONTACTOR2_ON _LOG_A("Switching Contactor2 ON.\n"); digitalWrite(PIN_SSR2, HIGH);
+#define CONTACTOR2_OFF _LOG_A("Switching Contactor2 OFF.\n"); digitalWrite(PIN_SSR2, LOW);
 
 #define BACKLIGHT_ON digitalWrite(PIN_LCD_LED, HIGH);
 #define BACKLIGHT_OFF digitalWrite(PIN_LCD_LED, LOW);
@@ -480,11 +482,9 @@ enum EnableC2_t { NOT_PRESENT, ALWAYS_OFF, SOLAR_OFF, ALWAYS_ON, AUTO };
 enum Modem_t { NOTPRESENT, EXPERIMENT };
 const static char StrEnableC2[][12] = { "Not present", "Always Off", "Solar Off", "Always On", "Auto" };
 const static char StrModem[][12] = { "Not present", "Experiment" };
-extern uint8_t Nr_Of_Phases_Charging;
 enum Single_Phase_t { FALSE, GOING_TO_SWITCH, AFTER_SWITCH };
 extern Single_Phase_t Switching_To_Single_Phase;
-uint8_t Force_Single_Phase_Charging(void);
-
+extern uint8_t Nr_Of_Phases_Charging;
 
 const struct {
     char LCD[10];
@@ -500,7 +500,7 @@ const struct {
     /* LCD,       Desc,                                                 Min, Max, Default */
     {"CONFIG",  "Fixed Cable or Type 2 Socket",                       0, 1, CONFIG},
     {"LOCK",    "Cable locking actuator type",                        0, 2, LOCK},
-    {"MIN",     "MIN Charge Current the EV will accept (per phase)",  6, 16, MIN_CURRENT},
+    {"MIN",     "MIN Charge Current the EV will accept (per phase)",  MIN_CURRENT, 16, MIN_CURRENT},
     {"MAX",     "MAX Charge Current for this EVSE (per phase)",       6, 80, MAX_CURRENT},
     {"PWR SHARE", "Share Power between multiple SmartEVSEs (2-8)",    0, NR_EVSES, LOADBL},
     {"SWITCH",  "Switch function control on pin SW",                  0, 4, SWITCH},
