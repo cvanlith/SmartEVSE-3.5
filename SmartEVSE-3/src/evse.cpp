@@ -1769,7 +1769,7 @@ uint16_t getItemValue(uint8_t nav) {
 
 void printStatus(void)
 {
-    _LOG_I ("STATE: %s Error: %u StartCurrent: -%i ChargeDelay: %u SolarStopTimer: %u NoCurrent: %u Imeasured: %.1f A IsetBalanced: %.1f A, MainsMeterTimeout=%u, EVMeterTimeout=%u.\n", getStateName(State), ErrorFlags, StartCurrent, ChargeDelay, SolarStopTimer,  NoCurrent, (float)Imeasured/10, (float)IsetBalanced/10, MainsMeterTimeout, EVMeterTimeout);
+    _LOG_I ("STATE: %s Error: %u StartCurrent: -%i ChargeDelay: %u SolarStopTimer: %u Solar3PhaseStartTimer: %u STSP: %d NoCurrent: %u Imeasured: %.1f A IsetBalanced: %.1f A, MainsMeterTimeout=%u, EVMeterTimeout=%u.\n", getStateName(State), ErrorFlags, StartCurrent, ChargeDelay, SolarStopTimer, Solar3PhaseStartTimer, Switching_To_Single_Phase, NoCurrent, (float)Imeasured/10, (float)IsetBalanced/10, MainsMeterTimeout, EVMeterTimeout);
     _LOG_I("L1: %.1f A L2: %.1f A L3: %.1f A Isum: %.1f A\n", (float)Irms[0]/10, (float)Irms[1]/10, (float)Irms[2]/10, (float)Isum/10);
 }
 
