@@ -95,6 +95,8 @@ static esp_adc_cal_characteristics_t * adc_chars_Temperature;
 
 struct ModBus MB;          // Used by SmartEVSE fuctions
 
+extern unsigned char RFID[8];
+
 const char StrStateName[15][13] = {"A", "B", "C", "D", "COMM_B", "COMM_B_OK", "COMM_C", "COMM_C_OK", "Activate", "B1", "C1", "MODEM1", "MODEM2", "MODEM_OK", "MODEM_DENIED"};
 const char StrStateNameWeb[15][17] = {"Ready to Charge", "Connected to EV", "Charging", "D", "Request State B", "State B OK", "Request State C", "State C OK", "Activate", "Charging Stopped", "Stop Charging", "Modem Setup", "Modem Request", "Modem Done", "Modem Denied"};
 const char StrErrorNameWeb[9][20] = {"None", "No Power Available", "Communication Error", "Temperature High", "EV Meter Comm Error", "RCM Tripped", "Waiting for Solar", "Test IO", "Flash Error"};
@@ -1071,7 +1073,7 @@ void CalcBalancedCurrent(char mod) {
             _LOG_V("Checkpoint 3 Isetbalanced=%.1f A, IsumImport=%.1f, Isum=%.1f, ImportCurrent=%i.\n", (float)IsetBalanced/10, (float)IsumImport/10, (float)Isum/10, ImportCurrent);
 
             // If IsetBalanced is below MinCurrent or negative, make sure it's set to MinCurrent.
-            if ( (IsetBalanced < (ActiveEVSE * MinCurrent * 10)) || (IsetBalanced < 0) ) {
+            if ( (IsetBalanced <= (ActiveEVSE * MinCurrent * 10)) || (IsetBalanced < 0) ) {
                 IsetBalanced = ActiveEVSE * MinCurrent * 10;
                 // ----------- Check to see if we have to continue charging on solar power alone ----------
                 if (ActiveEVSE && StopTime && (IsumImport > 10)) {
@@ -2726,6 +2728,7 @@ void SetupMQTTClient() {
     announce("Access", "sensor");
     announce("State", "sensor");
     announce("RFID", "sensor");
+    announce("RFIDLastRead", "sensor");
 
     //set the parameters for and announce diagnostic sensor entities:
     optional_payload = jsna("entity_category","diagnostic");
@@ -2783,6 +2786,11 @@ void mqttPublishData() {
         MQTTclient.publish(MQTTprefix + "/ChargeCurrentOverride", String(OverrideCurrent), true, 0);
         MQTTclient.publish(MQTTprefix + "/Access", String(StrAccessBit[Access_bit]), true, 0);
         MQTTclient.publish(MQTTprefix + "/RFID", !RFIDReader ? "Not Installed" : RFIDstatus >= 8 ? "NOSTATUS" : StrRFIDStatusWeb[RFIDstatus], true, 0);
+        if (RFIDReader) {
+            char buf[13];
+            sprintf(buf, "%02X%02X%02X%02X%02X%02X", RFID[1], RFID[2], RFID[3], RFID[4], RFID[5], RFID[6]);
+            MQTTclient.publish(MQTTprefix + "/RFIDLastRead", buf, true, 0);
+        }
         MQTTclient.publish(MQTTprefix + "/State", getStateNameWeb(State), true, 0);
         MQTTclient.publish(MQTTprefix + "/Error", getErrorNameWeb(ErrorFlags), true, 0);
         MQTTclient.publish(MQTTprefix + "/EVPlugState", (pilot != PILOT_12V) ? "Connected" : "Disconnected", true, 0);
@@ -3931,6 +3939,7 @@ void StartwebServer(void) {
 
         DynamicJsonDocument doc(1600); // https://arduinojson.org/v6/assistant/
         doc["version"] = String(VERSION);
+        doc["serialnr"] = serialnr;
         doc["mode"] = mode;
         doc["mode_id"] = modeId;
         doc["car_connected"] = evConnected;
@@ -3966,6 +3975,11 @@ void StartwebServer(void) {
         doc["evse"]["error"] = error;
         doc["evse"]["error_id"] = errorId;
         doc["evse"]["rfid"] = !RFIDReader ? "Not Installed" : RFIDstatus >= 8 ? "NOSTATUS" : StrRFIDStatusWeb[RFIDstatus];
+        if (RFIDReader) {
+            char buf[13];
+            sprintf(buf, "%02X%02X%02X%02X%02X%02X", RFID[1], RFID[2], RFID[3], RFID[4], RFID[5], RFID[6]);
+            doc["evse"]["rfid_lastread"] = buf;
+        }
 
         doc["settings"]["charge_current"] = Balanced[0];
         doc["settings"]["override_current"] = OverrideCurrent;
@@ -4859,9 +4873,9 @@ void setup() {
 
 void loop() {
     //this loop is for non-time critical stuff that needs to run approx 1 / second
-    delay(1000);
+    vTaskDelay(1000 / portTICK_PERIOD_MS);
     getLocalTime(&timeinfo, 1000U);
-    if (!LocalTimeSet) {
+    if (!LocalTimeSet && WIFImode == 1) {
         _LOG_A("Time not synced with NTP yet.\n");
     }
 
